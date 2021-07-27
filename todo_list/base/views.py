@@ -1,7 +1,4 @@
-from typing import Counter
-from django.db.models.base import Model
-from django.shortcuts import redirect, render
-from django.urls.base import reverse
+from django.shortcuts import render, redirect
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView, FormView
@@ -12,11 +9,17 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 
+# Imports for Reordering Feature
+from django.views import View
+from django.shortcuts import redirect
+from django.db import transaction
+
 from .models import Task
 
 
+
 class CustomLoginView(LoginView):
-    template_name = "base/login.html"
+    template_name = 'base/login.html'
     fields = '__all__'
     redirect_authenticated_user = True
 
@@ -51,21 +54,21 @@ class TaskList(LoginRequiredMixin, ListView):
         context['tasks'] = context['tasks'].filter(user=self.request.user)
         context['count'] = context['tasks'].filter(complete=False).count()
 
-        search_input = self.request.GET.get('área de búsqueda')  or ''
+        search_input = self.request.GET.get('search-area') or ''
         if search_input:
             context['tasks'] = context['tasks'].filter(
-                title__icontains=search_input)
+                title__contains=search_input)
 
         context['search_input'] = search_input
 
         return context
 
 
-
 class TaskDetail(LoginRequiredMixin, DetailView):
-    model = Task 
+    model = Task
     context_object_name = 'task'
     template_name = 'base/task.html'
+
 
 class TaskCreate(LoginRequiredMixin, CreateView):
     model = Task
@@ -87,3 +90,18 @@ class DeleteView(LoginRequiredMixin, DeleteView):
     model = Task
     context_object_name = 'task'
     success_url = reverse_lazy('tasks')
+    def get_queryset(self):
+        owner = self.request.user
+        return self.model.objects.filter(user=owner)
+
+class TaskReorder(View):
+    def post(self, request):
+        form = PositionForm(request.POST)
+
+        if form.is_valid():
+            positionList = form.cleaned_data["position"].split(',')
+
+            with transaction.atomic():
+                self.request.user.set_task_order(positionList)
+
+        return redirect(reverse_lazy('tasks'))
